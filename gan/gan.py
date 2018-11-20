@@ -62,7 +62,7 @@ def main():
     if (device.type == 'cuda') and (ngpu > 1):
         D = nn.DataParallel(D, list(range(ngpu)))
 
-        # initialize weights
+    # initialize weights
     D.apply(weights_init)
 
     # print the model

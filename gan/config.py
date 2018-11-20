@@ -36,14 +36,18 @@ nc = 3
 g_ksize = ([(5, 5)] * 5)[::-1]
 d_ksize = ([(5, 5)] * 5)
 
+# depth of G and D
+g_depth = len(g_ksize)
+d_depth = len(d_ksize)
+
 # number of layers in generator G and discriminator D
 g_nlayers = len(g_ksize)
 d_nlayers = len(d_ksize)
 
-# number of filters in generator G and discriminator D
-g_nfilters = [nc] + [2 ** (n + 6) for n in range(g_nlayers - 1)]
-g_nfilters = g_nfilters[::-1]
-d_nfilters = [2 ** (n + 6) for n in range(d_nlayers - 1)] + [1]
+# list of filters in generator G and discriminator D
+g_filters = [nc] + [2 ** (n + 6) for n in range(g_nlayers - 1)]
+g_filters = g_filters[::-1]
+d_filters = [1] + [2 ** (n + 6) for n in range(d_nlayers - 1)]
 
 
 #
@@ -62,10 +66,8 @@ nz = nz_local + nz_global + nz_periodic
 zx = 6
 zx_sample = 32
 
-# size of image X
-npx = (zx - 1) * 2 ** g_nlayers + 1
-
-#### ????
+# size of image X ?
+npx = zx * 2 ** g_depth
 
 # custom weights initialization called on G and D
 def weights_init(m):

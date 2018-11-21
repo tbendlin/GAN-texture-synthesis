@@ -13,6 +13,9 @@ import matplotlib.animation as animation
 from IPython.display import HTML
 
 
+"""
+Initializes generator and discriminator and begins training loop.
+"""
 def main():
     #
     # INITIALIZATION
@@ -21,10 +24,8 @@ def main():
     # set of training images
     dataset = dset.ImageFolder(root=dataroot,
                                transform=transforms.Compose([
-                                   transforms.Resize(npx),
-                                   transforms.CenterCrop(npx),
-                                   transforms.ToTensor(),
-                                   transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)), # mystery
+                                   transforms.RandomCrop(npx),
+                                   transforms.ToTensor()
                                ]))
 
     # data loader for training images
@@ -102,44 +103,80 @@ def main():
 
         for i, data in enumerate(dataloader, 0):
 
-            # train discriminator: real data
+            #
+            # TRAIN DISCRIMINATOR ON REAL DATA
+            #
+
+            # reset gradients
             D.zero_grad()
+
+            # move and label a batch of data
             real_cpu = data[0].to(device)
             b_size = real_cpu.size(0)
-            label = torch.full((b_size,), real_label, device=device)
+            label = torch.full((b_size, zx * zx), real_label, device=device)
+
+            # forward pass through discriminator
             output = D(real_cpu).view(-1)
+
+            # calculate loss
             errD_real = criterion(output, label)
+
+            # calculate gradients
             errD_real.backward()
             D_x = output.mean().item()
 
-            #train generator: fake data
+            #
+            # TRAIN DISCRIMINATOR ON GENERATED DATA
+            #
+
+            # get initial noise tensor
             noise = torch.randn(b_size, nz, 1, 1, device=device)
-            # Generate fake image batch with G
+
+            # generate fake image batch with generator
             fake = G(noise)
             label.fill_(fake_label)
-            # Classify all fake batch with D
+
+            # forward pass through discriminator
             output = D(fake.detach()).view(-1)
-            # Calculate D's loss on the all-fake batch
+
+            # calculate loss
             errD_fake = criterion(output, label)
-            # Calculate the gradients for this batch
+
+            # calculate gradients
             errD_fake.backward()
             D_G_z1 = output.mean().item()
-            # Add the gradients from the all-real and all-fake batches
+
+            #
+            # UPDATE DISCRIMINATOR
+            #
+
+            # get the total error
             errD = errD_real + errD_fake
-            # Update D
+
+            # perform adam optimization on discriminator
             optimizerD.step()
 
-            # train generator
+            #
+            # TRAIN GENERATOR
+            #
+
+            # reset gradients
             G.zero_grad()
-            label.fill_(real_label)  # fake labels are real for generator cost
-            # Since we just updated D, perform another forward pass of all-fake batch through D
+
+            # we want the discriminator to label generated images as real
+            label.fill_(real_label)
+
+            # get a new output from the discriminator after optimization
             output = D(fake).view(-1)
-            # Calculate G's loss based on this output
+
+            # calculate loss based on discriminator output
             errG = criterion(output, label)
-            # Calculate gradients for G
+
+            # calculate gradients
             errG.backward()
             D_G_z2 = output.mean().item()
-            # Update G
+
+            # perform adam optimization on generator
             optimizerG.step()
 
             # output training stats
@@ -177,4 +214,5 @@ def main():
     HTML(ani.to_jshtml())
 
 
-main()
+if __name__ == '__main__':
+    main()

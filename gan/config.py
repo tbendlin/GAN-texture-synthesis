@@ -17,13 +17,13 @@ beta1 = 0.5
 num_epochs = 100
 
 # batch size
-batch_size = 25
+batch_size = 1  # 25
 
 # number of GPUs to use
 ngpu = 1
 
 # number of workers to use
-workers = 4
+workers = 1  # 4
 
 #
 # NETWORK PARAMETERS
@@ -59,15 +59,17 @@ nz_local = 30
 nz_global = 60
 nz_periodic = 0  # 3
 
-# number of total dimensions
+# number of total dimensions in Z
 nz = nz_local + nz_global + nz_periodic
 
 # number of spatial dimensions in z
 zx = 6
-zx_sample = 32
 
-# size of image X ?
-npx = zx * 2 ** g_depth
+# size of each spatial dimension
+zx_sample = 2 ** g_depth  # 32
+
+# total image size
+npx = zx * zx_sample
 
 # custom weights initialization called on G and D
 def weights_init(m):

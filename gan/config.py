@@ -47,7 +47,7 @@ d_nlayers = len(d_ksize)
 # list of filters in generator G and discriminator D
 g_filters = [nc] + [2 ** (n + 6) for n in range(g_nlayers - 1)]
 g_filters = g_filters[::-1]
-d_filters = [1] + [2 ** (n + 6) for n in range(d_nlayers - 1)]
+d_filters = [2 ** (n + 6) for n in range(d_nlayers - 1)] + [1]
 
 
 #

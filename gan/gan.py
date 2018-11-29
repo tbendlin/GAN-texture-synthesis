@@ -77,7 +77,7 @@ def main():
     criterion = nn.BCELoss()
 
     # create initial noise tensor
-    fixed_noise = torch.randn(zx, nz, 1, 1, device=device)
+    fixed_noise = torch.randn(1, nz, zx, zx, device=device)
 
     # establish convention for real and fake labels during training
     real_label = 1
@@ -101,88 +101,90 @@ def main():
 
     for epoch in range(num_epochs):
 
-        for i, data in enumerate(dataloader, 0):
+        for batch in range(num_batches):
 
-            #
-            # TRAIN DISCRIMINATOR ON REAL DATA
-            #
+            for i, data in enumerate(dataloader, 0):
 
-            # reset gradients
-            D.zero_grad()
+                #
+                # TRAIN DISCRIMINATOR ON REAL DATA
+                #
 
-            # move and label a batch of data
-            real_cpu = data[0].to(device)
-            b_size = real_cpu.size(0)
-            label = torch.full((b_size, zx * zx), real_label, device=device)
+                # reset gradients
+                D.zero_grad()
 
-            # forward pass through discriminator
-            output = D(real_cpu).view(-1)
+                # move and label a batch of data
+                real_cpu = data[0].to(device)
+                b_size = real_cpu.size(0)
+                label = torch.full((b_size, zx * zx), real_label, device=device)
 
-            # calculate loss
-            errD_real = criterion(output, label)
+                # forward pass through discriminator
+                output = D(real_cpu).view(-1)
 
-            # calculate gradients
-            errD_real.backward()
-            D_x = output.mean().item()
+                # calculate loss
+                errD_real = criterion(output, label)
 
-            #
-            # TRAIN DISCRIMINATOR ON GENERATED DATA
-            #
+                # calculate gradients
+                errD_real.backward()
+                D_x = output.mean().item()
 
-            # get initial noise tensor
-            noise = torch.randn(b_size, nz, zx, zx, device=device)
+                #
+                # TRAIN DISCRIMINATOR ON GENERATED DATA
+                #
 
-            # generate fake image batch with generator
-            fake = G(noise)
-            label.fill_(fake_label)
+                # get initial noise tensor
+                noise = torch.randn(b_size, nz, zx, zx, device=device)
 
-            # forward pass through discriminator
-            output = D(fake.detach()).view(-1)
+                # generate fake image batch with generator
+                fake = G(noise)
+                label.fill_(fake_label)
 
-            # calculate loss
-            errD_fake = criterion(output, label)
+                # forward pass through discriminator
+                output = D(fake.detach()).view(-1)
 
-            # calculate gradients
-            errD_fake.backward()
-            D_G_z1 = output.mean().item()
+                # calculate loss
+                errD_fake = criterion(output, label)
 
-            #
-            # UPDATE DISCRIMINATOR
-            #
+                # calculate gradients
+                errD_fake.backward()
+                D_G_z1 = output.mean().item()
 
-            # get the total error
-            errD = errD_real + errD_fake
+                #
+                # UPDATE DISCRIMINATOR
+                #
 
-            # perform adam optimization on discriminator
-            optimizerD.step()
+                # get the total error
+                errD = errD_real + errD_fake
 
-            #
-            # TRAIN GENERATOR
-            #
+                # perform adam optimization on discriminator
+                optimizerD.step()
 
-            # reset gradients
-            G.zero_grad()
+                #
+                # TRAIN GENERATOR
+                #
 
-            # we want the discriminator to label generated images as real
-            label.fill_(real_label)
+                # reset gradients
+                G.zero_grad()
 
-            # get a new output from the discriminator after optimization
-            output = D(fake).view(-1)
+                # we want the discriminator to label generated images as real
+                label.fill_(real_label)
 
-            # calculate loss based on discriminator output
-            errG = criterion(output, label)
+                # get a new output from the discriminator after optimization
+                output = D(fake).view(-1)
 
-            # calculate gradients
-            errG.backward()
-            D_G_z2 = output.mean().item()
+                # calculate loss based on discriminator output
+                errG = criterion(output, label)
 
-            # perform adam optimization on generator
-            optimizerG.step()
+                # calculate gradients
+                errG.backward()
+                D_G_z2 = output.mean().item()
+
+                # perform adam optimization on generator
+                optimizerG.step()
 
             # output training stats
-            if i % 50 == 0:
-                print('[%d/%d][%d/%d]\tLoss_D: %.4f\tLoss_G: %.4f\tD(x): %.4f\tD(G(z)): %.4f / %.4f'
-                      % (epoch, num_epochs, i, len(dataloader),
+            if batch % 50 == 0:
+                print('[%d/%d][%d/%d][%d/%d]\tLoss_D: %.4f\tLoss_G: %.4f\tD(x): %.4f\tD(G(z)): %.4f / %.4f'
+                      % (epoch, num_epochs, batch, num_batches, i, len(dataloader),
                          errD.item(), errG.item(), D_x, D_G_z1, D_G_z2))
 
             # Save Losses for plotting later
@@ -196,6 +198,11 @@ def main():
                 img_list.append(vutils.make_grid(fake, padding=2, normalize=True))
 
             iters += 1
+
+        # save an example image at the end of each epoch
+        with torch.no_grad():
+            fake = G(fixed_noise).detach().cpu()
+        vutils.save_image(fake, "epoch_%d.png" % epoch)
 
     plt.figure(figsize=(10, 5))
     plt.title("Generator and Discriminator Loss During Training")

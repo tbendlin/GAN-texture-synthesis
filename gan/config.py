@@ -14,7 +14,9 @@ lr = 0.0002
 beta1 = 0.5
 
 # number of epochs
-num_epochs = 100
+num_epochs = 10
+
+num_batches = 1000
 
 # batch size
 batch_size = 1  # 25

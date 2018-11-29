@@ -77,13 +77,13 @@ def main():
     criterion = nn.BCELoss()
 
     # create initial noise tensor
-    fixed_noise = torch.randn(npx, nz, 1, 1, device=device)
+    fixed_noise = torch.randn(zx, nz, 1, 1, device=device)
 
     # establish convention for real and fake labels during training
     real_label = 1
     fake_label = 0
 
-    # Setup Adam optimizers for both G and D
+    # Set up Adam optimizers for both G and D
     optimizerD = optim.Adam(D.parameters(), lr=lr, betas=(beta1, 0.999))
     optimizerG = optim.Adam(G.parameters(), lr=lr, betas=(beta1, 0.999))
 
@@ -130,7 +130,7 @@ def main():
             #
 
             # get initial noise tensor
-            noise = torch.randn(b_size, nz, 1, 1, device=device)
+            noise = torch.randn(b_size, nz, zx, zx, device=device)
 
             # generate fake image batch with generator
             fake = G(noise)

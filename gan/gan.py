@@ -87,19 +87,42 @@ def main():
     optimizerD = optim.Adam(D.parameters(), lr=lr, betas=(beta1, 0.999))
     optimizerG = optim.Adam(G.parameters(), lr=lr, betas=(beta1, 0.999))
 
-    #
-    # TRAINING LOOP
-    #
-
     # lists to keep track of progress
     img_list = []
     G_losses = []
     D_losses = []
-    iters = 0
+
+    #
+    # LOAD SAVED MODEL
+    #
+
+    epoch_init = 0
+
+    if model_load is not "":
+        print("Loading checkpoint...")
+        checkpoint = torch.load(model_load)
+        epoch_init = checkpoint['epoch'] + 1
+        G.load_state_dict(checkpoint['g_state_dict'])
+        D.load_state_dict(checkpoint['d_state_dict'])
+        optimizerG.load_state_dict(checkpoint['g_optimizer_state_dict'])
+        optimizerD.load_state_dict(checkpoint['d_optimizer_state_dict'])
+        G_losses = checkpoint['g_loss']
+        D_losses = checkpoint['d_loss']
+
+        # save a test image to see what we loaded
+        with torch.no_grad():
+            G.eval()
+            fake = G(fixed_noise).detach().cpu()
+            G.train()
+        vutils.save_image(fake, "load.png")
+
+    #
+    # TRAINING LOOP
+    #
 
     print("Starting training...")
 
-    for epoch in range(num_epochs):
+    for epoch in range(epoch_init, num_epochs):
 
         for batch in range(num_batches):
 
@@ -192,16 +215,27 @@ def main():
             D_losses.append(errD.item())
 
             # Check how the generator is doing by saving G's output on fixed_noise
-            if (iters % 500 == 0) or ((epoch == num_epochs - 1) and (i == len(dataloader) - 1)):
+            if (batch % 500 == 0) or ((epoch == num_epochs - 1) and (i == len(dataloader) - 1)):
                 with torch.no_grad():
                     fake = G(fixed_noise).detach().cpu()
                 img_list.append(vutils.make_grid(fake, padding=2, normalize=True))
 
-            iters += 1
+        # save model progress
+        torch.save({
+            'epoch': epoch,
+            'g_state_dict': G.state_dict(),
+            'd_state_dict': D.state_dict(),
+            'g_optimizer_state_dict': optimizerG.state_dict(),
+            'd_optimizer_state_dict': optimizerD.state_dict(),
+            'g_loss': G_losses,
+            'd_loss': D_losses,
+        }, model_save + "/epoch_%d.tar" % epoch)
 
-        # save an example image at the end of each epoch
+        # save an example image
         with torch.no_grad():
+            G.eval()
             fake = G(fixed_noise).detach().cpu()
+            G.train()
         vutils.save_image(fake, "epoch_%d.png" % epoch)
 
     plt.figure(figsize=(10, 5))

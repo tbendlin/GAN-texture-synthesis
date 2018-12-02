@@ -7,6 +7,12 @@ import torch.nn as nn
 # location of training image(s)
 dataroot = "training"
 
+# location of model to load (empty string to start from scratch)
+model_load = "model/wrinkled/epoch_0.tar"
+
+# location to save model
+model_save = "model/wrinkled"
+
 # learning rate (adam optimization)
 lr = 0.0002
 

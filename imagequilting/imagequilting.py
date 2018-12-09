@@ -2,6 +2,7 @@ import cv2 as cv
 import math
 import random
 import numpy
+import sys
 
 """
     Main algorithm that implements the image quilting algorithm detailed in
@@ -44,17 +45,40 @@ def image_quilting(inputfile, patchsize=40, factor=1.5, overlap=.25, tolerance=.
     p_row, p_col = get_num_patches((resized_width, resized_height), patchsize, overlap_distance)
 
     # Initialize Is, the output image, to be random patches
-    Is = init_is(Io, (resized_width, resized_height, imdim), patchsize)
+    Pold = get_random_patch(Io, patchsize)
+    Is = init_is(Pold, (resized_width, resized_height, imdim), patchsize)
 
-    patch = select_compatible_patch(Io, get_random_patch(Io, patchsize), patchsize, tolerance, 0)
+    num_inserted = 0
+    for m in range(0, p_row):
+        if num_inserted > 1:
+            break
+        for n in range(0, p_col):
+            if num_inserted > 1:
+                break
 
-    #for row in range(0, imsize[0]):
-    #    for col in range(0, imsize[1]):
-    #        patch = Is[row][col]
+            if m == 0 and n == 0:
+                continue
+
+            start_x = m * (patchsize - overlap_distance)
+            start_y = n * (patchsize - overlap_distance)
+
+            Pin = select_compatible_patch(Io, Pold, patchsize, overlap_distance, tolerance)
+            Pnew = compute_min_boundary_cut(Pold, Pin, patchsize, overlap_distance)
+
+            # Copy over selected patch
+            for row in range(0, patchsize):
+                for col in range(0, patchsize):
+                    if row + start_x >= Is.shape[0] or col + start_y >= Is.shape[1]:
+                        continue
+
+                    Is[row + start_x][col + start_y] = Pnew[row][col]
+
+            num_inserted += 1
+
+            Pold = Pnew
 
     # Write result to output directory
-    #outfile = "output/" + inputfile
-    #cv.imwrite("output/brick.jpg", Is)
+    cv.imwrite("output/brick.jpg", Is)
 
 """
     Helper function that determine how many patches per row and 
@@ -75,58 +99,17 @@ def get_num_patches(resized_dim, patchsize, overlap_distance):
     Helper function that will generalized the initialized Is by 
     randomly quilting together patches of images from the initial image Io
 """
-def init_is(Io, resized_dim, patchsize):
+def init_is(patch, resized_dim, patchsize):
     # Initialize new image
     Is = numpy.zeros(resized_dim)
-
-    # Generate a random patch
-    rand_patch = get_random_patch(Io, patchsize)
 
     # Copy over patch information into 0, 0
     for row in range(0, patchsize):
         for col in range(0, patchsize):
-
             # Copy over patch
-            Is[row][col] = rand_patch[row][col]
+            Is[row][col] = patch[row][col]
 
     return Is
-
-
-'''def randomized_quilt(Io, resized_dim, num_patches, patchsize, overlap_distance):
-    # Initialize new image
-    Is = numpy.zeros(resized_dim)
-
-    # Variables that will keep track of where we are starting the copy in Is
-    row_offset = col_offset = 0
-
-    # For all the patches that should be in the new image:
-    # 1. Generate a new random patch
-    # 2. Copy that random patch over to the new image
-    for p_row in range(0, num_patches[0]):
-        for p_col in range(0, num_patches[1]):
-            # Generate a new random patch
-            rand_patch = get_random_patch(Io, patchsize)
-
-            # Copy over patch information, overlapping with previous layer
-            for row in range(0, patchsize):
-                for col in range(0, patchsize):
-
-                    # Skip if copying over this part of the patch will be out of bounds
-                    if row + row_offset >= resized_dim[0] or col + col_offset >= resized_dim[1]:
-                        continue
-
-                    # Copy over patch
-                    Is[row + row_offset][col + col_offset] = rand_patch[row][col]
-
-            # Update the column offset as you go across the columns so it overlaps
-            col_offset += (patchsize - overlap_distance)
-
-        # Update col_offset and row_offset as you start a new row
-        col_offset = 0
-        row_offset += (patchsize - overlap_distance)
-
-    return Is'''
-
 
 """
     Helper function that will retrieve a random patch from an original image
@@ -162,31 +145,28 @@ def select_compatible_patch(Io, oldpatch, patchsize, overlap_distance, tolerance
     # Get the current dimensions
     imwidth, imheight = Io.shape[:2]
 
-    # initialize D-image (distance image)
+    # initialize D-image dimensions (distance image)
     d_rows = imwidth - patchsize
     d_cols = imheight - patchsize
-    D = numpy.zeros((d_rows, d_cols))
 
-    print("Calculating D image")
-    # For every pixel m, n in range (0...M - patchsize, 0...N - patchsize),
-    # Imaging (m, n) is the top left corner of a patch. Compute the distance measure
-    # for that patch and save it to the D image
-    for row in range(0, d_rows):
-        for col in range(0, d_cols):
-            D[row][col] = compute_D(Io, (row, col), oldpatch, patchsize, overlap_distance)
+    # Distance image is found by finding the SSD if the patch is started at each point
+    # This is the same of performing template matching with the overlapping regions
+    D = compute_D(Io, oldpatch, patchsize, overlap_distance)
 
-    print("Finding dmin")
     # Find the minimum distance. Will be used with tolerance to filter out patches
     d_min = (0, 0)
     for row in range(0, d_rows):
         for col in range(0, d_cols):
+            # All SSD errors smaller than one are set to 1
+            if D[row][col] < 1:
+                D[row][col] = 1
+
             if D[d_min[0]][d_min[1]] > D[row][col]:
                 d_min = (row, col)
 
     # Calculate minimum value
     minimum_val = (1 + tolerance) * D[d_min[0]][d_min[1]]
 
-    print("Getting all viable patches")
     # Get the set of all viable patches whose di
     viable_set = []
     for row in range(0, d_rows):
@@ -199,22 +179,24 @@ def select_compatible_patch(Io, oldpatch, patchsize, overlap_distance, tolerance
     return Io[m:(m + patchsize), n:(n + patchsize)]
 
 """
-Helper function that will compute the distance measure for the new patch given at coords
+    Helper function that will compute the distance measure for the new patch given at coords
 """
-def compute_D(Io, coords, oldpatch, patchsize, overlap_distance):
-    m, n = coords[0], coords[1]
-    distance = 0
+def compute_D(Io, oldpatch, patchsize, overlap_distance):
+    IoGray = cv.cvtColor(Io, cv.COLOR_RGB2GRAY)
 
-    for i in range(0, patchsize):
-        for j in range(0, patchsize):
-            # Q(i, j) is 0 if not in overlap region, 1 otherwise
-            # So if we aren't in the overlap region, don't bother computing anything
-            if patchsize - overlap_distance < i and patchsize - overlap_distance < j:
-                continue
+    oldpathConverted = numpy.uint8(oldpatch)
+    patchGray = cv.cvtColor(oldpathConverted, cv.COLOR_RGB2GRAY)
 
-            distance += l2_norm(numpy.square(numpy.subtract(oldpatch[i][j], Io[m + i][n + j])))
+    mask = numpy.zeros((patchsize, patchsize))
+    for row in range(patchsize - overlap_distance, patchsize):
+        for col in range(0, patchsize):
+            mask[row][col] = 1
 
-    return distance
+    for row in range(0, patchsize):
+        for col in range(patchsize - overlap_distance, patchsize):
+            mask[row][col] = 1
+
+    return cv.matchTemplate(image=IoGray, templ=patchGray, mask=mask, method=cv.TM_SQDIFF)
 
 """
     Helper function that computes the L2 Norm of 
@@ -226,10 +208,146 @@ def l2_norm(v1):
         squared_sum += math.pow(v1[i], 2)
     return math.sqrt(squared_sum)
 
+def compute_min_boundary_cut(oldpatch, inpatch, patchsize, overlap_distance):
+    Ev = numpy.zeros((patchsize, patchsize))
+    Eh = numpy.zeros((patchsize, patchsize))
 
-def compute_min_boundary_cut():
-    print("Implement me")
+    # Step 1: Calculate the vertical path, starting from the bottom
+    for row in range(patchsize - 1, -1, -1):
+        for col in range(patchsize - overlap_distance, patchsize):
+            currError = sse_error(inpatch[row][col], oldpatch[row][col])
 
+            # If the row + 1 is out of bounds, then we are filling in the first layer
+            if row + 1 >= patchsize:
+                Ev[row][col] = currError
+                continue
+
+            minVal = Ev[row + 1][col]
+
+            # Check to make sure not out of bounds. If not, reset minVal to minimum of values
+            if col - 1 >= patchsize - overlap_distance:
+                minVal = min(minVal, Ev[row + 1][col - 1])
+
+            # Check to make sure not out of bounds. If not, reset minVal to minimum of values
+            if col + 1 < patchsize:
+                minVal = min(minVal, Ev[row + 1][col + 1])
+
+            # Cost for this value is the minVal + currError
+            Ev[row][col] = currError + minVal
+
+    # Step 2: Calculate the horizontal path
+    for col in range(patchsize - 1, -1, -1):
+        for row in range(patchsize - 1, patchsize - overlap_distance - 1, -1):
+            currError = sse_error(inpatch[row][col], oldpatch[row][col])
+
+            # If the row + 1 is out of bounds, then we are filling in the first layer
+            if col + 1 >= patchsize:
+                Eh[row][col] = currError
+                continue
+
+            minVal = Eh[row][col + 1]
+
+            # Check to make sure not out of bounds. If not, reset minVal to minimum of values
+            if row - 1 >= patchsize - overlap_distance:
+                minVal = min(minVal, Eh[row - 1][col + 1])
+
+            # Check to make sure not out of bounds. If not, reset minVal to minimum of values
+            if row + 1 < patchsize:
+                minVal = min(minVal, Eh[row + 1][col + 1])
+
+            # Cost for this value is the minVal + currError
+            Eh[row][col] = currError + minVal
+
+    # Step 3: Find the optimal join point in the overlap
+    minOverlap = None
+    i = j = 0
+    for row in range(patchsize - 1, patchsize - overlap_distance - 1, -1):
+        for col in range(patchsize - overlap_distance, patchsize):
+            currError = sse_error(inpatch[row][col], oldpatch[row][col])
+            if minOverlap is None or (Ev[row][col] + Eh[col][row] - currError) < minOverlap:
+                minOverlap = Ev[row][col] + Eh[col][row] - currError
+                i = row
+                j = col
+
+    print("(", i, ", ", j, ")")
+    # Step 4: Compute binary mask M that is 1 left/on top of cut and 0 otherwise
+    mask = numpy.zeros(oldpatch.shape)
+
+    # Step 4.a Trace the horizontal of y starting from (i, j)
+    currRow = i
+    currCol = j
+    while currCol > -1:
+
+        # Set all points above the curr row as one
+        row = currRow
+        while row > (patchsize - overlap_distance) - 1:
+            mask[row][currCol] = 1
+            row -= 1
+
+        # Update the current row and the current column
+        leftVal = float("inf")
+        middleVal = Eh[currRow][currCol - 1]
+        rightVal = float("inf")
+
+        # Check to make sure not out of bounds. If not, set rightVal
+        if currRow - 1 > -1:
+            rightVal = Eh[currRow - 1][currCol - 1]
+
+        # Check to make sure not out of bounds. If not, set leftval
+        if currRow + 1 < overlap_distance:
+            leftVal = Eh[currRow + 1][currCol - 1]
+
+        # Curr row is set to lowest value's row, curr column is decremented
+
+        if leftVal < rightVal and leftVal < middleVal:
+            currRow = currRow + 1
+        elif rightVal < leftVal and rightVal < middleVal:
+            currRow = currRow - 1
+
+        currCol = currCol - 1
+
+    # Step 4.b
+    currRow = i
+    currCol = j
+    while (currRow > -1):
+        # Set all points to the left of currCol as 1, others as 0
+        for col in range(overlap_distance - patchsize, patchsize):
+            if col <= currCol:
+                mask[currRow][col] = 1
+            else:
+                mask[currRow][col] = 0
+
+        # Update the current row and the current column
+
+        leftVal = float("inf")
+        middleVal = Eh[currRow - 1][currCol]
+        rightVal = float("inf")
+
+        # Check to make sure not out of bounds. If not, set rightVal
+        if currCol - 1 > -1:
+            leftVal = Eh[currRow - 1][currCol - 1]
+
+        # Check to make sure not out of bounds. If not, set leftval
+        if currCol + 1 < overlap_distance:
+            rightVal = Eh[currRow - 1][currCol + 1]
+
+        # Curr col is set to lowest value's col, curr row is decremented
+
+        if leftVal < rightVal and leftVal < middleVal:
+            currCol = currCol - 1
+        elif rightVal < leftVal and rightVal < middleVal:
+            currCol = currCol + 1
+
+        currRow = currRow - 1
+
+    return (mask * oldpatch) + ((1 - mask) * inpatch)
+
+"""
+    Helper function that will compute the sum of squared error
+    for two given input vectors
+"""
+def sse_error(v1, v2):
+    return math.pow(l2_norm(v1) - l2_norm(v2), 2)
 
 def construct_new_patch():
     print("Implement me")

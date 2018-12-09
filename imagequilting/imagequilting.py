@@ -386,7 +386,7 @@ def sse_error(v1, v2):
 
 def get_horizontal_overlap_mask(patchsize, overlap_distance, dims):
     mask = numpy.zeros((patchsize, patchsize, dims))
-    for row in range(patchsize - overlap_distance, patchsize):
+    for row in range(0, overlap_distance):
         for col in range(0, patchsize):
             if dims == 1:
                 mask[row][col] = 1
@@ -397,7 +397,7 @@ def get_horizontal_overlap_mask(patchsize, overlap_distance, dims):
 def get_vertical_overlap_mask(patchsize, overlap_distance, dims):
     mask = numpy.zeros((patchsize, patchsize, dims))
     for row in range(0, patchsize):
-        for col in range(patchsize - overlap_distance, patchsize):
+        for col in range(0, overlap_distance):
             if dims == 1:
                 mask[row][col] = 1
             else:
@@ -406,15 +406,15 @@ def get_vertical_overlap_mask(patchsize, overlap_distance, dims):
 
 def get_L_overlap_mask(patchsize, overlap_distance, dims):
     mask = numpy.zeros((patchsize, patchsize, dims))
-    for row in range(0, patchsize):
-        for col in range(patchsize - overlap_distance, patchsize):
+    for row in range(0, overlap_distance):
+        for col in range(0, patchsize):
             if dims == 1:
                 mask[row][col] = 1
             else:
-                mask[row][col] = numpy.ones((dims,))
+                mask[row][col] = numpy.ones((dims))
 
-    for row in range(patchsize - overlap_distance, patchsize):
-        for col in range(0, patchsize):
+    for row in range(0, patchsize):
+        for col in range(0, overlap_distance):
             if dims == 1:
                 mask[row][col] = 1
             else:

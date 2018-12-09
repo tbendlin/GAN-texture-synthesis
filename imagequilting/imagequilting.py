@@ -186,17 +186,17 @@ def select_compatible_patch(Io, oldpatch, patchsize, overlap_distance, overlap_t
 """
     Helper function that will compute the distance measure for the new patch given at coords
 """
-def compute_D(Io, oldpatch, patchsize, overlap_distance, overlap_type):
+'''def compute_D(Io, oldpatch, patchsize, overlap_distance, overlap_type):
     IoConverted = numpy.uint8(Io)
     oldpathConverted = numpy.uint8(oldpatch)
     IoGray = cv.cvtColor(IoConverted, cv.COLOR_RGB2GRAY)
     patchGray = cv.cvtColor(oldpathConverted, cv.COLOR_RGB2GRAY)
 
-    mask = get_overlap_for_type(patchsize, overlap_type, overlap_type)
+    mask = get_overlap_for_type(patchsize, overlap_distance, overlap_type)
 
-    return cv.matchTemplate(image=IoGray, templ=patchGray, mask=mask, method=cv.TM_SQDIFF)
+    return cv.matchTemplate(image=IoGray, templ=patchGray, mask=mask, method=cv.TM_SQDIFF)'''
 
-'''def compute_D(Io, oldpatch, patchsize, overlap_distance, overlap_type):
+def compute_D(Io, oldpatch, patchsize, overlap_distance, overlap_type):
     IoConverted = numpy.uint8(Io)
     oldpathConverted = numpy.uint8(oldpatch)
 
@@ -208,7 +208,6 @@ def compute_D(Io, oldpatch, patchsize, overlap_distance, overlap_type):
     term2 = - 2 * cv.filter2D(src=IoGray, kernel=numpy.multiply(mask, patchGray), ddepth=cv.CV_8U)
     term3 = numpy.square(numpy.multiply(mask, patchGray).sum()).sum()
     return term1 + term2 + term3
-    #return cv.matchTemplate(image=IoGray, templ=patchGray, mask=mask, method=cv.TM_SQDIFF)'''
 
 """
     Helper function that computes the L2 Norm of 
@@ -431,6 +430,6 @@ def get_overlap_for_type(patchsize, overlap_distance, overlaptype, dims=1):
         return get_L_overlap_mask(patchsize, overlap_distance, dims)
 
 def main():
-    image_quilting("input/sponge.png")
+    image_quilting("input/brick.jpg")
 
 main()

@@ -10,14 +10,14 @@ L_OVERLAP = 2
 """
     Main algorithm that implements the image quilting algorithm detailed in
     Efros and Friedman's paper. Image is saved to /output directory
-    
+
     Accepts the following parameters:
     :param inputfile (string) the name of the input texture
     :param patchsize (int)    the size of the patches, cannot be bigger than the entire image
     :param factor    (float)  the increase in size of the original image
     :param overlap   (float)  the overlap size between blocks 
     :param tolerance (float)  tolerance for edge similarity
-    
+
 """
 def image_quilting(inputfile, patchsize=80, factor=1.5, overlap=.25, tolerance=.1):
     # Open image
@@ -51,7 +51,6 @@ def image_quilting(inputfile, patchsize=80, factor=1.5, overlap=.25, tolerance=.
     Pold = get_random_patch(Io, patchsize)
     Is = init_is(Pold, (resized_width, resized_height, imdim), patchsize)
 
-    i = 0
     for m in range(0, p_row):
         for n in range(0, p_col):
             if m == 0 and n == 0:
@@ -68,6 +67,7 @@ def image_quilting(inputfile, patchsize=80, factor=1.5, overlap=.25, tolerance=.
             if n == 0:
                 overlap_type = HORIZONTAL_OVERLAP
 
+            Pold = get_next_p_old_for_coords(Is, start_x, start_y, patchsize, overlap_distance, overlap_type)
             Pin = select_compatible_patch(Io, Pold, patchsize, overlap_distance, overlap_type, tolerance)
             Pnew = compute_min_boundary_cut(Pold, Pin, patchsize, overlap_distance, imdim, overlap_type)
 
@@ -78,32 +78,60 @@ def image_quilting(inputfile, patchsize=80, factor=1.5, overlap=.25, tolerance=.
                         continue
 
                     Is[row + start_x][col + start_y] = Pnew[row][col]
-
-            Pold = Pnew
-            i += 1
+        # cv.imwrite("output/brick.jpg", Is)
+        # exit(0)
 
     # Write result to output directory
     cv.imwrite("output/brick.jpg", Is)
 
+
 """
     Helper function that determine how many patches per row and 
     column there should be given an image, a resize factor, and the given patchsize
-    
+
     :param resized_dim (float[])  resized dimensions of the image
     :param patchsize   (int)    the size of the patches, cannot be bigger than the entire image
     :param factor      (float)  the increase in size of the original image
-    
+
     :return patches_row, patches_col (int, int) patches per row, patches per column
 """
+
+
 def get_num_patches(resized_dim, patchsize, overlap_distance):
     # Number of patches is the re-sized dimensions divided by patchsize - overlap_distance
     return math.ceil(resized_dim[1] / (patchsize - overlap_distance)), \
            math.ceil(resized_dim[0] / (patchsize - overlap_distance))
 
+
+"""
+    Helper function that will retrieve a random patch from an original image
+    with the given patch size
+
+    Randomly selects a row and column to start from, which will be the top left
+    corner of the patch
+
+    :param Io        (image) Original image
+    :param patchsize (int)   size of each square patch
+"""
+
+
+def get_random_patch(Io, patchsize):
+    # Get the current dimensions
+    imwidth, imheight = Io.shape[:2]
+
+    # Randomly generate a (row, col) to start from
+    rand_row, rand_col = random.randint(0, imwidth - patchsize), random.randint(0, imheight - patchsize)
+
+    # Return patch
+    return Io[rand_row:(rand_row + patchsize), rand_col:(rand_col + patchsize)]
+
+
 """
     Helper function that will generalized the initialized Is by 
     randomly quilting together patches of images from the initial image Io
 """
+
+
 def init_is(patch, resized_dim, patchsize):
     # Initialize new image
     Is = numpy.zeros(resized_dim)
@@ -116,36 +144,118 @@ def init_is(patch, resized_dim, patchsize):
 
     return Is
 
-"""
-    Helper function that will retrieve a random patch from an original image
-    with the given patch size
-    
-    Randomly selects a row and column to start from, which will be the top left
-    corner of the patch
-    
-    :param Io        (image) Original image
-    :param patchsize (int)   size of each square patch
-"""
-def get_random_patch(Io, patchsize):
-    # Get the current dimensions
-    imwidth, imheight = Io.shape[:2]
 
-    # Randomly generate a (row, col) to start from
-    rand_row, rand_col = random.randint(0, imwidth - patchsize), random.randint(0, imheight - patchsize)
+def get_next_p_old_for_coords(Is, row, col, patchsize, overlap_distance, overlap_type):
+    full_patch = numpy.zeros((patchsize, patchsize, Is.shape[2]))
+    for i in range(0, patchsize):
+        for j in range(0, patchsize):
+            if i + row >= Is.shape[0] or j + col >= Is.shape[1]:
+                continue
 
-    # Return patch
-    return Io[rand_row:(rand_row + patchsize), rand_col:(rand_col + patchsize)]
+            full_patch[i][j] = Is[i + row][j + col]
+
+    mask = get_overlap_for_type(patchsize, overlap_distance, overlap_type, Is.shape[2])
+    return full_patch * mask
+
+
+"""
+    Helper function that will return the horizontal-shaped overlap mask
+
+    :param patchsize        (int) Wp, the patch size
+    :param overlap_distance (int) Wo, the overlap distance
+    :param dims             (int) dimensionality of mask, defaults to 1D
+"""
+
+
+def get_horizontal_overlap_mask(patchsize, overlap_distance, dims):
+    mask = numpy.zeros((patchsize, patchsize, dims))
+    for row in range(0, overlap_distance):
+        for col in range(0, patchsize):
+            if dims == 1:
+                mask[row][col] = 1
+            else:
+                mask[row][col] = numpy.ones((dims,))
+    return mask
+
+
+"""
+    Helper function that will return the vertical-shaped overlap mask
+
+    :param patchsize        (int) Wp, the patch size
+    :param overlap_distance (int) Wo, the overlap distance
+    :param dims             (int) dimensionality of mask, defaults to 1D
+"""
+
+
+def get_vertical_overlap_mask(patchsize, overlap_distance, dims):
+    mask = numpy.zeros((patchsize, patchsize, dims))
+    for row in range(0, patchsize):
+        for col in range(0, overlap_distance):
+            if dims == 1:
+                mask[row][col] = 1
+            else:
+                mask[row][col] = numpy.ones((dims,))
+    return mask
+
+
+"""
+    Helper function that will return the L-shaped overlap mask
+
+    :param patchsize        (int) Wp, the patch size
+    :param overlap_distance (int) Wo, the overlap distance
+    :param dims             (int) dimensionality of mask, defaults to 1D
+"""
+
+
+def get_L_overlap_mask(patchsize, overlap_distance, dims):
+    mask = numpy.zeros((patchsize, patchsize, dims))
+    for row in range(0, overlap_distance):
+        for col in range(0, patchsize):
+            if dims == 1:
+                mask[row][col] = 1
+            else:
+                mask[row][col] = numpy.ones((dims,))
+
+    for row in range(0, patchsize):
+        for col in range(0, overlap_distance):
+            if dims == 1:
+                mask[row][col] = 1
+            else:
+                mask[row][col] = numpy.ones((dims,))
+    return mask
+
+
+"""
+    Helper function that will return the correct mask for the given overlap type
+
+    :param patchsize        (int) Wp, the patch size
+    :param overlap_distance (int) Wo, the overlap distance
+    :param overlap_type     (int) HORIZONTAL_OVERLAP, VERTICAL_OVERLAP or L_OVERLAP
+    :param dims             (int) dimensionality of mask, defaults to 1D
+"""
+
+
+def get_overlap_for_type(patchsize, overlap_distance, overlap_type, dims=1):
+    if overlap_type == HORIZONTAL_OVERLAP:
+        return get_horizontal_overlap_mask(patchsize, overlap_distance, dims)
+    elif overlap_type == VERTICAL_OVERLAP:
+        return get_vertical_overlap_mask(patchsize, overlap_distance, dims)
+    else:
+        return get_L_overlap_mask(patchsize, overlap_distance, dims)
+
 
 """
     Helper function that will select the most compatible patch with the given random patch
     sampled from the original image
-    
+
     :param Io               (image)   Original image
     :param oldpatch         (ndarray) random patch chosen
     :param patchsize        (int)     size of each square patch
     :param overlap_distance (int) size of overlap gap between patches
     :param tolerance        (float) tolerance of similarity between viable patches
 """
+
+
 def select_compatible_patch(Io, oldpatch, patchsize, overlap_distance, overlap_type, tolerance):
     # Get the current dimensions
     imwidth, imheight = Io.shape[:2]
@@ -180,44 +290,64 @@ def select_compatible_patch(Io, oldpatch, patchsize, overlap_distance, overlap_t
                 viable_set.append((row, col))
 
     # Randomly choose a patch to use in the viable set of patches
-    m, n = viable_set[random.randint(0, len(viable_set) - 1)]
+    m, n = viable_set[random.randint(0, len(viable_set))]
     return Io[m:(m + patchsize), n:(n + patchsize)]
+
 
 """
     Helper function that will compute the distance measure for the new patch given at coords
+
+    :param Io               (image)   Original image
+    :param oldpatch         (ndarray) random patch chosen
+    :param patchsize        (int)     size of each square patch
+    :param overlap_distance (int) size of overlap gap between patches
+    :param overlap_type     (int) HORIZONTAL_OVERLAP, VERTICAL_OVERLAP or L_OVERLAP
 """
-'''def compute_D(Io, oldpatch, patchsize, overlap_distance, overlap_type):
-    IoConverted = numpy.uint8(Io)
-    oldpathConverted = numpy.uint8(oldpatch)
-    IoGray = cv.cvtColor(IoConverted, cv.COLOR_RGB2GRAY)
-    patchGray = cv.cvtColor(oldpathConverted, cv.COLOR_RGB2GRAY)
 
-    mask = get_overlap_for_type(patchsize, overlap_distance, overlap_type)
-
-    return cv.matchTemplate(image=IoGray, templ=patchGray, mask=mask, method=cv.TM_SQDIFF)'''
 
 def compute_D(Io, oldpatch, patchsize, overlap_distance, overlap_type):
-    IoConverted = numpy.uint8(Io)
-    oldpathConverted = numpy.uint8(oldpatch)
+    # Get the current dimensions
+    imwidth, imheight = Io.shape[:2]
 
-    IoGray = cv.cvtColor(IoConverted, cv.COLOR_RGB2GRAY)
-    patchGray = cv.cvtColor(oldpathConverted, cv.COLOR_RGB2GRAY)
-    mask = get_overlap_for_type(patchsize, overlap_distance, overlap_type)
+    # initialize distance_image dimensions
+    d_rows = imwidth - patchsize
+    d_cols = imheight - patchsize
 
-    term1 = cv.filter2D(src=numpy.square(IoGray), kernel=mask, ddepth=cv.CV_8U)
-    term2 = - 2 * cv.filter2D(src=IoGray, kernel=numpy.multiply(mask, patchGray), ddepth=cv.CV_8U)
-    term3 = numpy.square(numpy.multiply(mask, patchGray).sum()).sum()
-    return term1 + term2 + term3
+    distance_image = numpy.zeros((d_rows, d_cols, 1))
+    mask = get_overlap_for_type(patchsize, overlap_distance, overlap_type, Io.shape[2])
+    for m in range(0, patchsize - overlap_distance):
+        for n in range(0, patchsize - overlap_distance):
+            distance_image[m][n] = ssd(oldpatch, Io[m:(m + patchsize), n:(n + patchsize)], mask)
+    return distance_image
+
 
 """
-    Helper function that computes the L2 Norm of 
-    a vector value
+    Helper function that returns the ssd of the two patches for a given overlap region
+
+    D[m][n] = sum from i, j = 0 (Q(i, j) - (Pold(i, j) + Io[i + m][j + n])^2)
+
+    :param oldpatch         (ndarray) random patch chosen
+    :param inpatch          (ndarray) prospective patch to compare
+    :param mask             (ndarray) overlap region representation
 """
-def l2_norm(v1):
-    squared_sum = 0
-    for i in range(0, v1.shape[0]):
-        squared_sum += math.pow(v1[i], 2)
-    return math.sqrt(squared_sum)
+
+
+def ssd(oldpatch, inpatch, mask):
+    return numpy.multiply(mask, numpy.square(numpy.subtract(oldpatch, inpatch))).sum()
+
+
+"""
+    Calculates the minimum boundary cut and returns the patch that will be transposed onto the 
+    final image
+
+    :param oldpatch         (ndarray) random patch chosen
+    :param inpatch          (ndarray) patch that will overlap
+    :param patchsize        (int)     size of each square patch
+    :param overlap_distance (int)     size of overlap gap between patches
+    :param dims             (int)     dimensions of image
+    :param overlap_type     (int)     HORIZONTAL_OVERLAP, VERTICAL_OVERLAP or L_OVERLAP
+"""
+
 
 def compute_min_boundary_cut(oldpatch, inpatch, patchsize, overlap_distance, dims, overlap_type):
     mask = numpy.zeros((patchsize, patchsize, dims))
@@ -233,7 +363,24 @@ def compute_min_boundary_cut(oldpatch, inpatch, patchsize, overlap_distance, dim
         mask = fill_in_vertical_path(Ev, mask, patchsize, overlap_distance, dims)
         mask = fill_in_horizontal_path(Eh, mask, patchsize, overlap_distance, dims)
 
+    '''cv.imwrite("output/oldpatch.jpg", oldpatch)
+    cv.imwrite("output/inpatch.jpg", inpatch)
+    cv.imwrite("output/mincut.jpg", (mask * oldpatch))
+    cv.imwrite("output/newpatch.jpg", (mask * oldpatch) + ((1 - mask) * inpatch))'''
+
     return (mask * oldpatch) + ((1 - mask) * inpatch)
+
+
+"""
+    Helper function that calculates the minimum vertical path for a given set of patches that will
+    overlap
+
+    :param oldpatch         (ndarray) random patch chosen
+    :param inpatch          (ndarray) patch that will overlap
+    :param patchsize        (int)     size of each square patch
+    :param overlap_distance (int)     size of overlap gap between patches
+"""
+
 
 def calculate_vertical_path(oldpatch, inpatch, patchsize, overlap_distance):
     Ev = numpy.zeros((patchsize, patchsize))
@@ -261,6 +408,18 @@ def calculate_vertical_path(oldpatch, inpatch, patchsize, overlap_distance):
             Ev[row][col] = currError + minVal
     return Ev
 
+
+"""
+    Helper function that calculates the minimum horizontal path for a given set of patches that will
+    overlap
+
+    :param oldpatch         (ndarray) random patch chosen
+    :param inpatch          (ndarray) patch that will overlap
+    :param patchsize        (int)     size of each square patch
+    :param overlap_distance (int)     size of overlap gap between patches
+"""
+
+
 def calculate_horizontal_path(oldpatch, inpatch, patchsize, overlap_distance):
     Eh = numpy.zeros((patchsize, patchsize))
 
@@ -287,6 +446,14 @@ def calculate_horizontal_path(oldpatch, inpatch, patchsize, overlap_distance):
             # Cost for this value is the minVal + currError
             Eh[row][col] = currError + minVal
     return Eh
+
+
+"""
+    Helper function that will fill in the mask of the minimum path such that
+    all pixels to the left/top of the cut are ____(one?)____ and all others are
+    ___(zero?)____
+"""
+
 
 def fill_in_vertical_path(Ev, mask, patchsize, overlap_distance, dims):
     # Step 4.a Trace the vertical of path starting from (i, j) and going down
@@ -333,6 +500,14 @@ def fill_in_vertical_path(Ev, mask, patchsize, overlap_distance, dims):
 
     return mask
 
+
+"""
+    Helper function that will fill in the mask of the minimum path such that
+    all pixels to the left/top of the cut are ____(one?)____ and all others are
+    ___(zero?)____
+"""
+
+
 def fill_in_horizontal_path(Eh, mask, patchsize, overlap_distance, dims):
     # Trace the horizontal path
     # Find the starting point of the horizontal path
@@ -377,59 +552,32 @@ def fill_in_horizontal_path(Eh, mask, patchsize, overlap_distance, dims):
         currCol = currCol + 1
     return mask
 
+
 """
     Helper function that will compute the sum of squared error
     for two given input vectors
 """
+
+
 def sse_error(v1, v2):
     return math.pow(l2_norm(v1) - l2_norm(v2), 2)
 
-def get_horizontal_overlap_mask(patchsize, overlap_distance, dims):
-    mask = numpy.zeros((patchsize, patchsize, dims))
-    for row in range(0, overlap_distance):
-        for col in range(0, patchsize):
-            if dims == 1:
-                mask[row][col] = 1
-            else:
-                mask[row][col] = numpy.ones((dims))
-    return mask
 
-def get_vertical_overlap_mask(patchsize, overlap_distance, dims):
-    mask = numpy.zeros((patchsize, patchsize, dims))
-    for row in range(0, patchsize):
-        for col in range(0, overlap_distance):
-            if dims == 1:
-                mask[row][col] = 1
-            else:
-                mask[row][col] = numpy.ones((dims,))
-    return mask
+"""
+    Helper function that computes the L2 Norm of 
+    a vector value
+"""
 
-def get_L_overlap_mask(patchsize, overlap_distance, dims):
-    mask = numpy.zeros((patchsize, patchsize, dims))
-    for row in range(0, overlap_distance):
-        for col in range(0, patchsize):
-            if dims == 1:
-                mask[row][col] = 1
-            else:
-                mask[row][col] = numpy.ones((dims))
 
-    for row in range(0, patchsize):
-        for col in range(0, overlap_distance):
-            if dims == 1:
-                mask[row][col] = 1
-            else:
-                mask[row][col] = numpy.ones((dims,))
-    return mask
+def l2_norm(v1):
+    squared_sum = 0
+    for i in range(0, v1.shape[0]):
+        squared_sum += math.pow(v1[i], 2)
+    return math.sqrt(squared_sum)
 
-def get_overlap_for_type(patchsize, overlap_distance, overlaptype, dims=1):
-    if overlaptype == HORIZONTAL_OVERLAP:
-        return get_horizontal_overlap_mask(patchsize, overlap_distance, dims)
-    elif overlaptype == VERTICAL_OVERLAP:
-        return get_vertical_overlap_mask(patchsize, overlap_distance, dims)
-    else:
-        return get_L_overlap_mask(patchsize, overlap_distance, dims)
 
 def main():
-    image_quilting("input/brick.jpg")
+    image_quilting("input/sponge.png")
+
 
 main()

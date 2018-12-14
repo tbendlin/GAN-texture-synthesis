@@ -33,9 +33,9 @@ def image_quilting(inputfile, patchsize=40, factor=1.5, overlap=.25, tolerance=0
         print("Patch size must be smaller than image dimensions minus patchsize, and greater than one")
         return
 
-    if factor <= 1.0:
+    '''if factor <= 1.0:
         print("Resize factor should be greater than 1")
-        return
+        return'''
 
     if overlap < 0.0 or overlap > 1.0:
         print("Overlap should be between 0.0 and 1.0")
@@ -452,7 +452,7 @@ def calculate_vertical_path(oldpatch, inpatch, patchsize, overlap_distance):
 def calculate_horizontal_path(oldpatch, inpatch, patchsize, overlap_distance):
     Eh = numpy.zeros((patchsize, patchsize))
     for col in range(patchsize - 1, -1, -1):
-        for row in range(overlap_distance - 1, -1, -1):
+        for row in range(0, overlap_distance):
             currError = sse_error(inpatch[row][col], oldpatch[row][col])
 
             # If the row + 1 is out of bounds, then we are filling in the first layer
@@ -587,7 +587,7 @@ def fill_in_horizontal_path(Eh, mask, patchsize, overlap_distance, dims):
 
 
 def sse_error(v1, v2):
-    return numpy.square(numpy.subtract(v1, v2)).mean()
+    return numpy.square(numpy.subtract(v1, v2)).sum()
 
 
 """
@@ -604,7 +604,7 @@ def l2_norm(v1):
 
 
 def main():
-    image_quilting("images/bubbly/bubbly_0054.jpg", factor=1.1)
+    image_quilting("images/perforated/perforated_0004.jpg", factor=0.50)
 
 
 main()
